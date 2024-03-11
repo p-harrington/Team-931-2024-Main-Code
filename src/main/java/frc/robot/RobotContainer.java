@@ -14,11 +14,15 @@ import edu.wpi.first.math.trajectory.Trajectory;
 import edu.wpi.first.math.trajectory.TrajectoryConfig;
 import edu.wpi.first.math.trajectory.TrajectoryGenerator;
 import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.GenericHID.RumbleType;
+import edu.wpi.first.wpilibj.event.EventLoop;
 import frc.robot.Constants.AutoConstants;
 import frc.robot.Constants.DriveConstants;
 import frc.robot.Constants.OperatorConstants;
 import frc.robot.subsystems.DriveSubsystem;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.RunCommand;
 import edu.wpi.first.wpilibj2.command.SwerveControllerCommand;
 import edu.wpi.first.wpilibj2.command.WaitUntilCommand;
@@ -28,6 +32,8 @@ import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 
 import java.util.List;
+import java.util.function.IntSupplier;
+
 import frc.robot.Constants.ShooterConstants;
 import frc.robot.subsystems.Arm;
 import frc.robot.subsystems.Climber;
@@ -88,21 +94,52 @@ public class RobotContainer {
 
     m_driverController.y().onTrue(m_robotDrive.runOnce((m_robotDrive :: zeroHeading)));
         
-      opStick.axisGreaterThan(OperatorConstants.intakeAxis, OperatorConstants.intakeTheshhold).and(new Trigger (shooter::sensorOff)) .onTrue(shooter.holdCommand(ShooterConstants.holdFwd)
-          .andThen(intake.runIf(.3, () -> {
-            var a = arm.atBottom();
-            //SmartDashboard.putBoolean("Arm test", a);
-            return a;})))
-        .or(
-      opStick.axisLessThan(OperatorConstants.intakeAxis, -OperatorConstants.intakeTheshhold) .onTrue(shooter.holdCommand(ShooterConstants.holdRvs)
-          .andThen(intake.runIf(-.3, () -> {
-            var a = arm.atBottom();
-            //SmartDashboard.putBoolean("Arm test", a);
-            return a;})))
-        )
-                                            .onFalse(shooter.holdCommand(0) // possible bug !!! Line 85 may counteract it
-                                            .andThen(intake.runcommand(0)));
+      final EventLoop eventLoop = CommandScheduler.getInstance().getDefaultButtonLoop();
+      /**
+       * Creates a binding that periodically receives a state request (in the form of an integer) from input,
+       * and if it is a change of state, records it and optionally dispatches a {@code Command}.
+       * (Recommendation: return a negative to prevent a {@code Command})
+       * @param input a function-like object which returns an {@code int} based on any info it wants
+       * @param output a set of {@link Command}s to dispatch based on the state (state 0 first),
+       * If the state {@code int} is {@code < 0} or {@code >= output.length}, no {@code Command} is dispatched.
+       */
+      final class MultiBind {
+        MultiBind(IntSupplier input, Command... output){
+          eventLoop.bind(new Runnable() {
+            int prevInput;
+            final int len = output.length;
+            public void run() {
+              int newInput = input.getAsInt();
+              if (newInput != prevInput) {
+                prevInput = newInput;
+                if (0 <= newInput && newInput < len)
+                output[newInput].schedule();
+              }
+            }
+          });
+        }
+      }
+    /* y axis: forward and reverse shooter hold */
+    new MultiBind (
+      () -> {
+        if (!shooter.sensorOff()) return 0;
+        var val = opStick.getRawAxis(OperatorConstants.intakeAxis);
+        if (val > OperatorConstants.intakeTheshhold) return 1;
+        if (val < -OperatorConstants.intakeTheshhold) return 2;
+        return 0;
+      }, 
+      shooter.holdCommand(0) .andThen(intake.runcommand(0)),
+      shooter.holdCommand(ShooterConstants.holdFwd)
+          .andThen(intake.runIf(.3, arm::atBottom)),
+      shooter.holdCommand(ShooterConstants.holdRvs)
+          .andThen(intake.runIf(-.3, arm::atBottom))
+      );
     
+    // rumble if the line break senses a "note"
+    new Trigger (shooter::sensorOff) 
+            .onFalse(rumble(true))
+            .onTrue(rumble(false));
+            
     /* y button: shooter shoot */
       opStick.button(1)
                   .onTrue(shooter.shootCommand(1)
@@ -135,6 +172,11 @@ public class RobotContainer {
                   .onTrue(climber.runOnce(() -> climber.stayPut1(false)));
 
     
+  }
+
+  private Command rumble(boolean b) {
+    var xbox = m_driverController.getHID();
+    return Commands.runOnce(() -> xbox.setRumble(RumbleType.kBothRumble, b? 1: 0));
   }
 
   /**

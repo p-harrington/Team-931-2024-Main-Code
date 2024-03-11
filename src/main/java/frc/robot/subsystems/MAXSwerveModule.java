@@ -10,7 +10,7 @@ import edu.wpi.first.math.kinematics.SwerveModuleState;
 
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
-import com.ctre.phoenix6.controls.VelocityDutyCycle;
+//import com.ctre.phoenix6.controls.VelocityDutyCycle;
 import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.NeutralModeValue;
@@ -35,7 +35,7 @@ public class MAXSwerveModule {
   private double m_chassisAngularOffset = 0;
   private SwerveModuleState m_desiredState = new SwerveModuleState(0.0, new Rotation2d());
 
-  private final VelocityDutyCycle talonCycle;
+  //private final VelocityDutyCycle talonCycle;
   private final VelocityVoltage  talonCycleVoltage;
 
   /**
@@ -127,7 +127,7 @@ public class MAXSwerveModule {
 
     driveConfiguration.Feedback.SensorToMechanismRatio = ModuleConstants.kDrivingMotorReduction;
 
-    talonCycle = new VelocityDutyCycle(0);
+    //talonCycle = new VelocityDutyCycle(0);
     
     talonCycleVoltage = new VelocityVoltage(0).withSlot(1);
 
