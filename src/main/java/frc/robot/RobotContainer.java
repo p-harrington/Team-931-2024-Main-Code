@@ -13,6 +13,7 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.trajectory.Trajectory;
 import edu.wpi.first.math.trajectory.TrajectoryConfig;
 import edu.wpi.first.math.trajectory.TrajectoryGenerator;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.GenericHID.RumbleType;
 import edu.wpi.first.wpilibj.event.EventLoop;
@@ -122,9 +123,8 @@ public class RobotContainer {
     /* y axis: forward and reverse shooter hold */
     new MultiBind (
       () -> {
-        if (!shooter.sensorOff()) return 0;
         var val = opStick.getRawAxis(OperatorConstants.intakeAxis);
-        if (val > OperatorConstants.intakeTheshhold) return 1;
+        if (val > OperatorConstants.intakeTheshhold && shooter.sensorOff()) return 1;
         if (val < -OperatorConstants.intakeTheshhold) return 2;
         return 0;
       }, 
@@ -136,10 +136,17 @@ public class RobotContainer {
       );
     
     // rumble if the line break senses a "note"
-    new Trigger (shooter::sensorOff) 
-            .onFalse(rumble(true))
-            .onTrue(rumble(false));
-            
+    eventLoop.bind(new Runnable() {
+      double timeStamp = -1;
+      public void run() {
+        if(timeStamp >= 0 && (/* Timer.getFPGATimestamp() > timeStamp || */ shooter.sensorOff())) {
+          timeStamp = -1;
+          rumble(false).schedule();
+        }
+        if(timeStamp == -1 && !shooter.sensorOff())
+            { timeStamp = Timer.getFPGATimestamp();
+              rumble(true).schedule();}}});
+
     /* y button: shooter shoot */
       opStick.button(1)
                   .onTrue(shooter.shootCommand(1)
